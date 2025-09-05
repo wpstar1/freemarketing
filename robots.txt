@@ -1,4 +1,8 @@
 User-agent: *
 Allow: /
+Crawl-delay: 1
 
-Sitemap: https://yoursite.com/sitemap.xml
+# 무료 백링크 등록 사이트
+# https://freemarketing.vercel.app
+
+Sitemap: https://freemarketing.vercel.app/sitemap.xml

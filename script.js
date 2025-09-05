@@ -96,7 +96,7 @@ ${anchorText}
 
 ✉️ 추가 정보
 더 자세한 정보가 필요하시다면 아래 링크를 참고해주세요.
-${url}
+🔗 자세히 보기: <a href="${url}" target="_blank" rel="nofollow">${url}</a>
 
 최종 업데이트: ${new Date().toLocaleDateString('ko-KR')}`
             return intro;
@@ -189,7 +189,7 @@ ${anchorText}
 ${keyword}에 대한 상세 가이드를 마치겠습니다.
 추가 정보는 아래 링크에서 확인하실 수 있습니다.
 
-🔗 ${url}
+🔗 자세히 보기: <a href="${url}" target="_blank" rel="nofollow">${url}</a>
 
 작성일: ${new Date().toLocaleDateString('ko-KR')}
 `
@@ -297,7 +297,7 @@ ${anchorText}
 더 자세한 정보를 원하시나요?
 아래 링크에서 확인해보세요!
 
-${url}
+🔗 자세히 보기: <a href="${url}" target="_blank" rel="nofollow">${url}</a>
 
 최종 수정: ${new Date().toLocaleDateString('ko-KR')} ${new Date().toLocaleTimeString('ko-KR')}`
         }
@@ -312,8 +312,6 @@ const itemsPerPage = 10;
 // 페이지 로드 시 초기화
 document.addEventListener('DOMContentLoaded', function() {
     loadPromotions();
-    updateStats();
-    displayPromotions();
     addInputListeners();
 });
 
@@ -397,7 +395,7 @@ window.originalGenerateContent = function() {
     
     const title = template.title.replace('{keyword}', mainKeyword);
     const longtailsList = longtails.map(lt => `• ${lt}`).join('\n');
-    const body = template.generateBody(mainKeyword, longtailsList, url, anchorText || `관련 정보 보기: ${url}`);
+    const body = template.generateBody(mainKeyword, longtailsList, url, anchorText || `🔗 관련 정보 보기: <a href="${url}" target="_blank" rel="nofollow">${url}</a>`);
     
     generatedData = {
         url: url,
@@ -430,50 +428,104 @@ window.originalGenerateContent = function() {
 }
 
 // 홍보 등록
-function submitPromotion() {
+async function submitPromotion() {
     if (!generatedData) {
         showToast('먼저 콘텐츠를 생성해주세요', 'error');
         return;
     }
     
-    promotions.unshift(generatedData);
-    savePromotions();
-    
-    updateStats();
-    currentPage = 1;
-    displayPromotions();
-    
-    document.getElementById('url').value = '';
-    document.getElementById('keyword').value = '';
-    document.getElementById('domain').value = '';
-    
-    const genSection = document.getElementById('generatedContentSection');
-    if (genSection) {
-        genSection.classList.remove('active');
-    }
-    
-    document.getElementById('submitBtn').disabled = true;
-    generatedData = null;
-    
-    showToast('홍보가 성공적으로 등록되었습니다!', 'success');
-    
-    setTimeout(() => {
-        const boardSection = document.getElementById('board-section');
-        if (boardSection) {
-            boardSection.scrollIntoView({ behavior: 'smooth' });
+    try {
+        // 등록 버튼 비활성화
+        document.getElementById('submitBtn').disabled = true;
+        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 등록 중...';
+        
+        // API로 데이터 저장
+        const response = await fetch('/api/promotions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                promotion: generatedData
+            })
+        });
+        
+        if (response.ok) {
+            // 성공 시 로컬 데이터도 업데이트
+            promotions.unshift(generatedData);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(promotions));
+            
+            updateStats();
+            currentPage = 1;
+            displayPromotions();
+            
+            // 폼 리셋
+            document.getElementById('url').value = '';
+            document.getElementById('keyword').value = '';
+            document.getElementById('domain').value = '';
+            
+            const genSection = document.getElementById('generatedContentSection');
+            if (genSection) {
+                genSection.classList.remove('active');
+            }
+            
+            generatedData = null;
+            showToast('홍보가 성공적으로 등록되었습니다!', 'success');
+            
+            setTimeout(() => {
+                const boardSection = document.getElementById('board-section');
+                if (boardSection) {
+                    boardSection.scrollIntoView({ behavior: 'smooth' });
+                }
+            }, 300);
+            
+        } else {
+            const errorData = await response.json();
+            showToast(errorData.error || '등록 중 오류가 발생했습니다', 'error');
         }
-    }, 300);
+        
+    } catch (error) {
+        console.error('등록 실패:', error);
+        showToast('네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', 'error');
+    } finally {
+        // 버튼 복구
+        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-rocket"></i> 지금 바로 노출시키기';
+        document.getElementById('submitBtn').disabled = generatedData ? false : true;
+    }
 }
 
-function loadPromotions() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-        try {
-            promotions = JSON.parse(saved);
-        } catch (e) {
-            console.error("Error parsing promotions from localStorage", e);
-            promotions = [];
+async function loadPromotions() {
+    try {
+        // 먼저 localStorage에서 로드 (빠른 표시용)
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            try {
+                promotions = JSON.parse(saved);
+                updateStats();
+                displayPromotions();
+            } catch (e) {
+                console.error("Error parsing promotions from localStorage", e);
+            }
         }
+
+        // API에서 최신 데이터 가져오기
+        const response = await fetch('/api/promotions');
+        if (response.ok) {
+            const data = await response.json();
+            promotions = data.promotions || [];
+            
+            // localStorage 업데이트
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(promotions));
+            
+            // UI 업데이트
+            updateStats();
+            displayPromotions();
+        }
+    } catch (error) {
+        console.error('데이터 로드 실패:', error);
+        // API 실패 시 localStorage 데이터만 사용
+        updateStats();
+        displayPromotions();
     }
 }
 
